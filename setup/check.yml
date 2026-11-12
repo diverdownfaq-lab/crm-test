@@ -1,0 +1,32 @@
+# Проверка после каждой отправки в GitHub (вкладка Actions в репозитории).
+# Этап 1: проверяет, что index.html на месте и в репозиторий не попали данные/пароли.
+# Этап 2: дополнительно проверяет, что JSON-выгрузки читаются и в них нет паролей.
+name: Проверка CRM
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: index.html на месте
+        run: test -s index.html && grep -q "<title>DSRC CRM" index.html
+
+      - name: Нет полных копий и паролей
+        run: |
+          if ls data/backup/* >/dev/null 2>&1; then echo "::error::data/backup не должен попадать в GitHub"; exit 1; fi
+          if grep -rlE '"pw"[[:space:]]*:' --include=*.json . ; then echo "::error::Найдены пароли в JSON"; exit 1; fi
+
+      - name: JSON-выгрузки читаются (этап 2)
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          files = list(pathlib.Path("data").rglob("*.json")) if pathlib.Path("data").exists() else []
+          for f in files:
+              json.load(open(f, encoding="utf-8-sig"))
+          print(f"OK: проверено JSON-файлов: {len(files)}")
+          PY
